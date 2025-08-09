@@ -2,6 +2,7 @@ import shutil
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
 from typing import List
 from services import document_processing
+from storage import vector_store
 
 router = APIRouter()
 
@@ -43,3 +44,36 @@ async def upload_documents(files: List[UploadFile] = File(...)):
         return {"processed_files": processed_files, "failed_files": failed_files}
 
     return {"message": "All files processed and stored successfully.", "processed_files": processed_files}
+
+@router.get("/files")
+async def get_all_files():
+    """
+    Get metadata for all processed files.
+    """
+    try:
+        results = vector_store.get_all_files()
+        return {"files": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/files/company/{company}")
+async def get_files_by_company(company: str):
+    """
+    Get all files for a specific company.
+    """
+    try:
+        results = vector_store.get_files_by_company(company)
+        return {"files": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/files/year/{year}")
+async def get_files_by_year(year: int):
+    """
+    Get all files for a specific year.
+    """
+    try:
+        results = vector_store.get_files_by_year(year)
+        return {"files": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -6,3 +6,6 @@ openai
 pypdf
 pydantic
 pydantic-settings
+langchain
+tiktoken
+cryptography>=3.1

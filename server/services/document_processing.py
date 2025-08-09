@@ -1,19 +1,19 @@
 import re
 from pypdf import PdfReader
 from storage import vector_store
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 
 def _parse_filename(filename: str) -> dict:
     """
     Parses the filename to extract company and year using regex.
-    Example: "amazon_2023_report.pdf" -> {"company": "amazon", "year": 2023}
     """
-    # Regex to find company name (letters) and year (4 digits)
-    match = re.match(r"([a-zA-Z]+)_(\d{4})", filename)
+    match = re.match(r"([A-Za-z0-9]+)_(\d{4})", filename)  # Updated regex for names like ADOBE
     if match:
         company, year = match.groups()
         return {"company": company.lower(), "year": int(year)}
-    # Return a default if the pattern doesn't match
     return {"company": "unknown", "year": 0}
+
 
 def _extract_text_from_pdf(file_path: str) -> str:
     """Extracts text from a single PDF file."""
@@ -23,6 +23,7 @@ def _extract_text_from_pdf(file_path: str) -> str:
         text += page.extract_text() or ""
     return text
 
+
 def process_and_store(file_path: str, filename: str):
     """
     Main function to process a single PDF and store it in the vector DB.
@@ -30,8 +31,10 @@ def process_and_store(file_path: str, filename: str):
     print(f"Processing {filename}...")
 
     # 1. Parse filename for metadata
-    metadata_base = _parse_filename(filename)
-    if metadata_base["company"] == "unknown":
+    file_metadata = _parse_filename(filename)
+    file_metadata["filename"] = filename  # Add filename to file metadata
+    
+    if file_metadata["company"] == "unknown":
         print(f"Warning: Could not parse company and year from {filename}.")
 
     # 2. Extract text from PDF
@@ -40,29 +43,37 @@ def process_and_store(file_path: str, filename: str):
         print(f"Warning: No text extracted from {filename}.")
         return
 
-    # 3. Chunk the text (simple example: split by paragraph)
-    chunks = full_text.split("\n\n")
-    # Filter out empty or very short chunks
-    chunks = [chunk for chunk in chunks if len(chunk.strip()) > 100]
+    # 3. Chunk the text using LangChain's RecursiveCharacterTextSplitter
+    # This splitter is token-aware and will try to split on logical separators
+    # first (like paragraphs) before forcing a split by character count.
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,  # The target size for each chunk in characters
+        chunk_overlap=200,  # The number of characters to overlap between chunks
+        length_function=len,
+        is_separator_regex=False,
+    )
+
+    chunks = text_splitter.split_text(full_text)
 
     # 4. Prepare data for ChromaDB
+    # Include file metadata in chunks for querying, but keep it minimal
     metadatas = []
     ids = []
     for i, chunk in enumerate(chunks):
-        # Create metadata for each chunk
-        chunk_metadata = metadata_base.copy()
-        chunk_metadata["filename"] = filename
-        chunk_metadata["chunk_number"] = i
+        chunk_metadata = {
+            "filename": filename,  # Reference to the file
+            "chunk_number": i,
+            "total_chunks": len(chunks),
+            "company": file_metadata["company"],  # For querying
+            "year": file_metadata["year"]  # For querying
+        }
         metadatas.append(chunk_metadata)
-
-        # Create a unique ID for each chunk
         ids.append(f"{filename}_chunk_{i}")
 
-    # 5. Add to vector store
-    # Note: We pass the text 'chunks' as 'documents' to ChromaDB.
-    # ChromaDB will automatically use the OpenAI function to create embeddings.
+    # 5. Add to vector store with separate file metadata
     vector_store.add_document_chunks(
         chunks=chunks,
         metadatas=metadatas,
-        ids=ids
+        ids=ids,
+        file_metadata=file_metadata
     )
