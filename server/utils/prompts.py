@@ -136,3 +136,35 @@ Respond with a JSON object containing:
 
 Always respond with valid JSON only. Do not include any explanations or additional text.
 """
+
+FINANCE_INTENT_PROMPT = """
+Classify the user's financial question into one of these intents:
+- market_summary: requests a general market overview or summary of major indices
+- multi_company_trend: requests performance trends for one or more specific companies/funds/stocks
+- fallback: all other questions that don't fit the above categories
+
+For market_summary intent, always use these symbols: ['^GSPC', '^DJI', '^IXIC', '^VIX']
+
+For multi_company_trend intent, extract the correct stock symbols from the question.
+
+Include a reasonable time_period (1d, 5d, 1mo, 3mo, 6mo, 1y, 5y) based on question context.
+
+Return VALID JSON with these exact keys:
+{
+  "intent": "market_summary|multi_company_trend|fallback",
+  "symbols": ["symbol1", "symbol2", ...],
+  "time_period": "time_period_string"
+}
+
+Example 1:
+Question: How is the market doing today?
+Response: {"intent": "market_summary", "symbols": ["^GSPC", "^DJI", "^IXIC", "^VIX"], "time_period": "1d"}
+
+Example 2:
+Question: Show me Apple and Microsoft stock performance over the last year
+Response: {"intent": "multi_company_trend", "symbols": ["AAPL", "MSFT"], "time_period": "1y"}
+
+Now classify this question:
+Question: {question}
+Response: 
+"""
