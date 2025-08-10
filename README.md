@@ -10,6 +10,7 @@ An AI-powered financial document analysis and investment strategy platform built
 - **Vector Search**: Semantic search through processed documents using ChromaDB
 - **Company & Year Filtering**: Organized document retrieval by company and year
 - **Modern UI**: Responsive design with dark/light mode support
+- ** Agentic Logic**: Smart query handling to determine the best pipeline for user questions
 
 ## 🏗️ Architecture
 
@@ -40,6 +41,7 @@ hack-nation/
 │   ├── core/                 # Core configuration
 │   ├── services/             # Business logic
 │   ├── storage/              # Database layer
+│   ├── utils/                # e.g. prompts
 │   ├── main.py               # FastAPI application entry
 │   └── requirements.txt
 └── README.md
@@ -63,9 +65,10 @@ hack-nation/
 - **FastAPI** - Modern Python web framework
 - **ChromaDB** - Vector database for embeddings
 - **LangChain** - Text processing and chunking
-- **PyPDF** - PDF text extraction
+- **Docling** - Advanced PDF text extraction
 - **OpenAI API** - AI model integration
 - **Uvicorn** - ASGI server
+- **StatsModels** - Statistical analysis library for ARIMA model
 
 ## ⚡ Quick Start
 
@@ -93,8 +96,9 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`
+You can access the Swagger and try the endpoints at `http://localhost:8000/docs`
 
+NOTE: make sure to have an empty `pdfs` folder in the root of the project (same level as `client` and `server` folders) to store the uploaded files.
 ## 📡 API Endpoints
 
 ### Document Management
@@ -103,6 +107,17 @@ The API will be available at `http://localhost:8000`
 - `GET /api/v1/documents/files` - Get all processed files
 - `GET /api/v1/documents/files/company/{company}` - Get files by company
 - `GET /api/v1/documents/files/year/{year}` - Get files by year
+
+### RAG response
+- `POST /api/v1/answering/query` - Ask a question using RAG (Retrieval-Augmented Generation) with uploaded documents
+
+### Smart Integration
+- `POST /api/v1/smart-query/smart-query` - 
+This is the main endpoint, the one that actually is called when the user asks a question in the chat interface. It uses agentic logic to determine the best pipeline to be used.
+
+The following endpoints have been developed for testing but in practice are not used in the application.
+- `GET /api/v1/smart-query/finance/stock/{symbol}` - Get stock data for a given company
+- `GET /api/v1/smart-query/finance/market-summary` - Get market summary data
 
 ## 💡 Usage
 
@@ -143,9 +158,9 @@ This project was built for hackathon challenges and includes:
 The system automatically:
 
 1. Extracts text from uploaded PDF documents
-2. Parses filenames for company and year metadata (format: `COMPANY_YEAR.pdf`)
-3. Chunks text using LangChain's RecursiveCharacterTextSplitter
-4. Creates vector embeddings using ChromaDB
+2. Parses filenames for company and year metadata (useful for filtering)
+3. Chunks text using LangChain's RecursiveCharacterTextSplitter (chunks of the same length, this is not the best approach but the simplest for sure)
+4. Creates vector embeddings and store them on ChromaDB
 5. Enables semantic search across document content
 
 ## 🎨 UI Components
