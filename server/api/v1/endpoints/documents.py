@@ -1,7 +1,7 @@
 import shutil
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
 from typing import List
-from services import document_processing
+from services.documents import document_processing
 from storage import vector_store
 
 router = APIRouter()

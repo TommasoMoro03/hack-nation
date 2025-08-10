@@ -61,7 +61,7 @@ class QuestionClassifier:
             self,
             llm_client: Any,
             model_name: str = "gpt-4o-mini",
-            temperature: float = 0,
+            temperature: float = 0.1,
             max_retries: int = 3
     ):
         """
@@ -189,32 +189,11 @@ class QuestionClassifier:
             self.logger.error(f"Failed to parse response: {response}")
             raise ValueError(f"Cannot parse classification result: {str(e)}")
 
-    def batch_classify(self, questions: list[str]) -> list[ClassificationResult]:
-        """
-        Classify multiple questions at once.
-
-        Args:
-            questions: List of questions to classify
-
-        Returns:
-            List of ClassificationResults in same order
-        """
-        results = []
-        for question in questions:
-            try:
-                result = self.classify(question)
-                results.append(result)
-            except Exception as e:
-                self.logger.error(f"Failed to classify question: {question}")
-                results.append(ClassificationResult())  # Safe default
-
-        return results
-
 
 # Factory function for easy instantiation
 def create_classifier(
         api_key: str,
-        model_name: str = "gpt-3.5-turbo",
+        model_name: str = "gpt-4o-mini",
         provider: str = "openai"
 ) -> QuestionClassifier:
     """

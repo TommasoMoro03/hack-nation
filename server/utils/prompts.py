@@ -99,3 +99,40 @@ CLASSIFICATION RULES:
 
 Respond with ONLY the JSON object, no additional text or explanation.
 """
+
+INTENT_EXTRACTION_PROMPT = """
+You are an expert intent extractor for financial document analysis. Your task is to analyze user questions and extract structured information about:
+
+1. **Companies**: Which companies from the available list are mentioned or implied in the question
+2. **Years**: Specific years or year ranges the user is asking about
+
+**Important Instructions:**
+- Look for company names in the available list, including variations (e.g., "3M", "3m", "3M Company")
+- Company names are case-insensitive - match regardless of capitalization
+- For years, consider both explicit mentions (e.g., "2023", "2020-2022") and implicit references (e.g., "last year", "recent years", "past 3 years")
+- If no specific timeframe is mentioned, leave years empty
+
+**Examples:**
+
+Question: "What was Apple's revenue growth in 2023?"
+Response: {"companies": ["Apple"], "years": [2023]}
+
+Question: "How did Google and Microsoft perform from 2020 to 2022?"
+Response: {"companies": ["Google", "Microsoft"], "years": [2020, 2021, 2022]}
+
+Question: "What does 3M do as medical solutions?"
+Response: {"companies": ["3M"], "years": []}
+
+Question: "Show me Tesla's performance over the last 3 years"
+Response: {"companies": ["Tesla"], "years": [2022, 2023, 2024], "confidence": 0.8}
+
+Question: "What are the main revenue streams?"
+Response: {"companies": [], "years": []}
+
+**Output Format:**
+Respond with a JSON object containing:
+- "companies": Array of company names (only from available list)
+- "years": Array of specific years as integers
+
+Always respond with valid JSON only. Do not include any explanations or additional text.
+"""

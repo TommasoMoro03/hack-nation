@@ -1,59 +1,65 @@
-"""
-API endpoints for question answering and classification.
-"""
-
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
-from services.question_classifier import QuestionClassifier, create_classifier
+from services.answering.document_filter import DocumentFilter
+from services.answering.intent_extractor import IntentExtractor
+from services.answering.question_classifier import QuestionClassifier, create_classifier
+from services.answering.response_generator import ResponseGenerator
 from core.config import settings
+from services.answering.retriever import Retriever
+from storage.vector_store import get_vector_store
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
 
-# Global classifier instance (initialized on startup)
+# Global instances (initialized on startup)
 _classifier: Optional[QuestionClassifier] = None
 
+vector_store = get_vector_store()
 
-class QuestionClassificationRequest(BaseModel):
-    """Request model for question classification"""
-    question: str = Field(..., min_length=1, max_length=1000, description="The user's question to classify")
-    context: Optional[Dict[str, Any]] = Field(None, description="Optional context (available companies, years, etc.)")
+retriever = Retriever(
+    vector_store=vector_store,
+    logger=logger
+)
 
 
-class QuestionClassificationResponse(BaseModel):
+class QuestionRequest(BaseModel):
+    """Base request model for questions"""
+    question: str = Field(..., min_length=1, max_length=1000, description="The user's question")
+    selected_documents: Optional[List[str]] = Field(None, description="Optional list of selected document IDs")
+
+
+class ClassificationResponse(BaseModel):
     """Response model for question classification"""
     text: bool = Field(..., description="Whether response should include explanatory text")
     recommendation: bool = Field(..., description="Whether response should include strategic recommendations")
     charts: bool = Field(..., description="Whether response should include data visualizations")
     preview: bool = Field(..., description="Whether response should include document previews")
     success: bool = Field(True, description="Whether classification was successful")
-    message: Optional[str] = Field(None, description="Optional message or error details")
 
 
-class ErrorResponse(BaseModel):
-    """Standard error response model"""
-    success: bool = Field(False)
-    error: str = Field(..., description="Error message")
-    detail: Optional[str] = Field(None, description="Additional error details")
+class FinalResponse(BaseModel):
+    """Response model for document retrieval"""
+    text: str = Field(..., description="The main text response to the question")
+    recommendation: str = Field(True, description="The explanatory text")
+    data_charts: Optional[List[str]] = Field(None, description="List of data charts included in the response")
+    preview: str = Field(True, description="Document previews")
 
 
 def get_classifier() -> QuestionClassifier:
-    """
-    Dependency to get the classifier instance.
-    Initializes it if not already done.
-    """
+    """Dependency to get the classifier instance"""
     global _classifier
 
     if _classifier is None:
         try:
             _classifier = create_classifier(
-                api_key=settings.OPENAI_API_KEY,  # You'll need this in your config
+                api_key=settings.OPENAI_API_KEY,
                 model_name=getattr(settings, 'CLASSIFICATION_MODEL', 'gpt-3.5-turbo'),
                 provider="openai"
             )
@@ -67,50 +73,48 @@ def get_classifier() -> QuestionClassifier:
 
     return _classifier
 
+def get_intent_extractor() -> IntentExtractor:
+    """Dependency to get the intent extractor instance"""
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        extractor = IntentExtractor(
+            llm_client=client,
+            model_name=getattr(settings, 'INTENT_EXTRACTION_MODEL', 'gpt-3.5-turbo'),
+            temperature=0.1,
+            max_retries=3
+        )
+        logger.info("Intent extractor initialized successfully")
+        return extractor
+    except Exception as e:
+        logger.error(f"Failed to initialize intent extractor: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to initialize intent extraction service"
+        )
+
 
 @router.post(
     "/classify",
-    response_model=QuestionClassificationResponse,
-    responses={
-        200: {"description": "Question classified successfully"},
-        400: {"description": "Invalid request data", "model": ErrorResponse},
-        500: {"description": "Classification service error", "model": ErrorResponse}
-    },
+    response_model=ClassificationResponse,
     summary="Classify Question",
     description="Analyze a user question to determine what components should be included in the response"
 )
 async def classify_question(
-        request: QuestionClassificationRequest,
-        classifier: QuestionClassifier = Depends(get_classifier)
+    request: QuestionRequest,
+    classifier: QuestionClassifier = Depends(get_classifier)
 ):
     """
     Classify a user question to determine response components.
-
-    This endpoint analyzes the user's question and returns a JSON object indicating
-    what components should be included in the response:
-    - text: Always true (basic explanatory response)
-    - recommendation: Strategic advice, decisions, next steps
-    - charts: Data visualizations, trends, comparisons
-    - preview: Document previews and page references
     """
     try:
-        # Validate input
         if not request.question.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Question cannot be empty"
-            )
+            raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-        # Classify the question
         logger.info(f"Classifying question: {request.question[:100]}...")
 
-        result = classifier.classify(
-            question=request.question.strip(),
-            context=request.context
-        )
+        result = classifier.classify(question=request.question.strip())
 
-        # Convert to response format
-        response = QuestionClassificationResponse(
+        response = ClassificationResponse(
             text=result.text,
             recommendation=result.recommendation,
             charts=result.charts,
@@ -122,14 +126,85 @@ async def classify_question(
         return response
 
     except HTTPException:
-        # Re-raise HTTP exceptions (like validation errors)
         raise
-
     except Exception as e:
-        logger.error(f"Classification failed for question: {request.question[:100]}...")
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"Classification failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
 
-        raise HTTPException(
-            status_code=500,
-            detail=f"Question classification failed: {str(e)}"
+@router.post(
+    "/query",
+    response_model=FinalResponse,
+    summary="Complete Query Answering",
+    description="Perform complete query processing including classification and retrieval"
+)
+async def answer_query(
+    request: QuestionRequest,
+    classifier: QuestionClassifier = Depends(get_classifier),
+    extractor: IntentExtractor = Depends(get_intent_extractor),
+):
+    """
+    Process a complete query including both classification and retrieval.
+
+    This is the main endpoint that combines:
+    1. Question classification
+    2. Intent extraction and document filtering
+    3. Semantic retrieval
+    4. Query complexity analysis
+    """
+    try:
+        if not request.question.strip():
+            raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+        logger.info(f"Processing complete query: {request.question[:100]}...")
+
+        # Step 1: Classify the question
+        classification_result = classifier.classify(question=request.question.strip())
+
+        # Step 2: Filter only documents that matches filters
+        # Step 2.1: If selected documents are provided, use them directly
+        if request.selected_documents:
+            # Convert string IDs to document objects
+            selected_docs = []
+            for doc_id in request.selected_documents:
+                doc = vector_store.get_document_by_id(doc_id)
+                if doc:
+                    selected_docs.append(doc)
+        else:
+            # Step 2.2: Extract intent to filter documents
+            intent = extractor.extract(request.question.strip())
+            document_filter = DocumentFilter(vector_store)
+            selected_docs = document_filter.filter_by_intent(intent).documents
+
+        if not selected_docs:
+            raise HTTPException(status_code=404, detail="No relevant documents found for the query")
+
+        # Step 3: Retrieve documents based on classification
+        retrieved_chunks = retriever.retrieve(
+            question=request.question.strip(),
+            selected_documents=selected_docs,
         )
+
+        # Step 4: Generate final answer
+        answer = ResponseGenerator.generate_answer(
+            question=request.question.strip(),
+            retrieved_chunks=retrieved_chunks.chunks,
+            vector_store=vector_store,
+            classification=classification_result
+        )
+
+        # Step 5: Prepare final response
+        response = FinalResponse(
+            text=answer,
+            recommendation="",
+            data_charts=[],
+            preview=""
+        )
+
+        logger.info(f"Answer generated successfully")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Complete query processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
