@@ -338,7 +338,7 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 							</Badge>
 						</div>
 
-						<ScrollArea className="h-[400px] md:h-[600px] pr-3">
+						<ScrollArea className="h-[400px] md:h-[500px] pr-3">
 							<div className="space-y-3">
 								{uploadedFiles.map((file) => (
 									<div
@@ -445,8 +445,8 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 					</TabsContent>
 				</Tabs>
 
-				<DialogFooter>
-					<div className="flex items-center justify-between ">
+				<DialogFooter className="">
+					<div className="flex items-center justify-between">
 						<div className="text-sm text-muted-foreground mr-4">
 							{selectedFiles.length > 0 && (
 								<span>{selectedFiles.length} files selected for analysis</span>

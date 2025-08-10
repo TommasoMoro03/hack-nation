@@ -83,7 +83,7 @@
 	}
 
 	& ol:not(.not-prose ol) {
-		@apply my-6 ml-6 list-decimal [&>li]:mt-2;
+		@apply my-6 ml-6 list-decimal [&>li]:mt-1;
 
 		& p {
 			@apply my-0 inline;
