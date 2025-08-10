@@ -2,6 +2,7 @@ import re
 from pypdf import PdfReader
 from storage import vector_store
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from docling.document_converter import DocumentConverter  # New import for Docling
 
 
 def _parse_filename(filename: str) -> dict:
@@ -15,13 +16,75 @@ def _parse_filename(filename: str) -> dict:
     return {"company": "unknown", "year": 0}
 
 
+"""
 def _extract_text_from_pdf(file_path: str) -> str:
-    """Extracts text from a single PDF file."""
     reader = PdfReader(file_path)
     text = ""
     for page in reader.pages:
         text += page.extract_text() or ""
     return text
+"""
+
+
+def _extract_text_from_pdf(file_path: str) -> str:
+    """Extracts text from a single PDF file using Docling's DocumentConverter.
+    Converts PDF to Markdown first, then extracts text from the Markdown content.
+
+    Args:
+        file_path: Path to the PDF file
+
+    Returns:
+        Extracted text as a single string
+    """
+    try:
+        from docling import DocumentConverter
+        import tempfile
+        import os
+
+        # Create a temporary directory for conversion
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Initialize DocumentConverter
+            converter = DocumentConverter()
+
+            # Convert PDF to Markdown in the temp directory
+            md_file_path = os.path.join(temp_dir, "converted.md")
+            converter.convert(
+                input_path=file_path,
+                output_path=md_file_path,
+                input_format="pdf",
+                output_format="markdown",
+                options={
+                    "tables": True,  # Extract tables
+                    "formatting": True,  # Preserve formatting
+                    "footnotes": True,  # Include footnotes
+                    "comments": False  # Exclude comments for cleaner text
+                }
+            )
+
+            # Read the converted Markdown file
+            with open(md_file_path, 'r', encoding='utf-8') as f:
+                markdown_content = f.read()
+
+            # Remove excessive Markdown formatting if needed
+            # This keeps the text clean while preserving structure
+            clean_text = re.sub(r'#{1,6}\s*', '', markdown_content)  # Remove headers
+            clean_text = re.sub(r'\*{1,2}(.*?)\*{1,2}', r'\1', clean_text)  # Remove bold/italic
+            clean_text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', clean_text)  # Remove links
+            clean_text = re.sub(r'`{3}.*?`{3}', '', clean_text, flags=re.DOTALL)  # Remove code blocks
+
+            return clean_text.strip()
+
+    except Exception as e:
+        print(f"Error converting PDF with Docling: {e}")
+        # Fallback to PyPDF if Docling fails
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as fallback_e:
+            print(f"Fallback extraction also failed: {fallback_e}")
+            return ""
+
 
 
 def process_and_store(file_path: str, filename: str):
