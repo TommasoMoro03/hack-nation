@@ -1,5 +1,4 @@
 "use client";
-
 import {
 	useState,
 	useRef,
@@ -8,7 +7,7 @@ import {
 	useEffect,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { UploadCloud, File as FileIcon } from "lucide-react";
+import { UploadCloud, File as FileIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type FileStatus = "idle" | "dragging" | "uploading" | "error";
@@ -19,12 +18,13 @@ interface FileError {
 }
 
 interface FileUploadProps {
-	onUploadSuccess?: (file: File) => void;
+	onUploadSuccess?: (files: File[]) => void;
 	onUploadError?: (error: FileError) => void;
 	acceptedFileTypes?: string[];
 	maxFileSize?: number;
-	currentFile?: File | null;
-	onFileRemove?: () => void;
+	maxFiles?: number;
+	currentFiles?: File[];
+	onFilesRemove?: () => void;
 	/** Duration in milliseconds for the upload simulation. Defaults to 2000ms (2s), 0 for no simulation */
 	uploadDelay?: number;
 	validateFile?: (file: File) => FileError | null;
@@ -32,7 +32,9 @@ interface FileUploadProps {
 }
 
 const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const DEFAULT_MAX_FILES = 10;
 const UPLOAD_STEP_SIZE = 5;
+
 const FILE_SIZES = [
 	"Bytes",
 	"KB",
@@ -79,7 +81,6 @@ const UploadIllustration = () => (
 					repeatCount="indefinite"
 				/>
 			</circle>
-
 			<path
 				d="M30 35H70C75 35 75 40 75 40V65C75 70 70 70 70 70H30C25 70 25 65 25 65V40C25 35 30 35 30 35Z"
 				className="fill-blue-100 dark:fill-blue-900/30 stroke-blue-500 dark:stroke-blue-400"
@@ -94,14 +95,12 @@ const UploadIllustration = () => (
                         M30 35H70C75 35 75 40 75 40V65C75 70 70 70 70 70H30C25 70 25 65 25 65V40C25 35 30 35 30 35Z"
 				/>
 			</path>
-
 			<path
 				d="M30 35C30 35 35 35 40 35C45 35 45 30 50 30C55 30 55 35 60 35C65 35 70 35 70 35"
 				className="stroke-blue-500 dark:stroke-blue-400"
 				strokeWidth="2"
 				fill="none"
 			/>
-
 			<g className="transform translate-y-2">
 				<line
 					x1="50"
@@ -146,7 +145,6 @@ const UploadingAnimation = ({ progress }: { progress: number }) => (
 			className="w-full h-full"
 			aria-label={`Upload progress: ${Math.round(progress)}%`}>
 			<title>Upload Progress Indicator</title>
-
 			<defs>
 				<mask id="progress-mask">
 					<rect
@@ -164,7 +162,6 @@ const UploadingAnimation = ({ progress }: { progress: number }) => (
 					/>
 				</mask>
 			</defs>
-
 			<style>
 				{`
                     @keyframes rotate-cw {
@@ -192,14 +189,12 @@ const UploadingAnimation = ({ progress }: { progress: number }) => (
                     .g-spin circle:nth-child(12) { animation: rotate-ccw 8s linear infinite; }
                     .g-spin circle:nth-child(13) { animation: rotate-cw 8s linear infinite; }
                     .g-spin circle:nth-child(14) { animation: rotate-ccw 8s linear infinite; }
-
                     .g-spin circle:nth-child(2n) { animation-delay: 0.2s; }
                     .g-spin circle:nth-child(3n) { animation-delay: 0.3s; }
                     .g-spin circle:nth-child(5n) { animation-delay: 0.5s; }
                     .g-spin circle:nth-child(7n) { animation-delay: 0.7s; }
                 `}
 			</style>
-
 			<g
 				className="g-spin"
 				strokeWidth="10"
@@ -313,13 +308,14 @@ export default function FileUpload({
 	onUploadError = () => {},
 	acceptedFileTypes = [],
 	maxFileSize = DEFAULT_MAX_FILE_SIZE,
-	currentFile: initialFile = null,
-	onFileRemove = () => {},
+	maxFiles = DEFAULT_MAX_FILES,
+	currentFiles: initialFiles = [],
+	onFilesRemove = () => {},
 	uploadDelay = 2000,
 	validateFile = () => null,
 	className,
 }: FileUploadProps) {
-	const [file, setFile] = useState<File | null>(initialFile);
+	const [files, setFiles] = useState<File[]>(initialFiles);
 	const [status, setStatus] = useState<FileStatus>("idle");
 	const [progress, setProgress] = useState(0);
 	const [error, setError] = useState<FileError | null>(null);
@@ -350,7 +346,6 @@ export default function FileUpload({
 	const validateFileType = useCallback(
 		(file: File): FileError | null => {
 			if (!acceptedFileTypes?.length) return null;
-
 			const fileType = file.type.toLowerCase();
 			if (
 				!acceptedFileTypes.some((type) => fileType.match(type.toLowerCase()))
@@ -365,12 +360,24 @@ export default function FileUpload({
 		[acceptedFileTypes]
 	);
 
+	const validateFileCount = useCallback(
+		(newFilesCount: number): FileError | null => {
+			if (files.length + newFilesCount > maxFiles) {
+				return {
+					message: `Maximum ${maxFiles} files allowed`,
+					code: "TOO_MANY_FILES",
+				};
+			}
+			return null;
+		},
+		[files.length, maxFiles]
+	);
+
 	const handleError = useCallback(
 		(error: FileError) => {
 			setError(error);
 			setStatus("error");
 			onUploadError?.(error);
-
 			setTimeout(() => {
 				setError(null);
 				setStatus("idle");
@@ -380,13 +387,11 @@ export default function FileUpload({
 	);
 
 	const simulateUpload = useCallback(
-		(uploadingFile: File) => {
+		(uploadingFiles: File[]) => {
 			let currentProgress = 0;
-
 			if (uploadIntervalRef.current) {
 				clearInterval(uploadIntervalRef.current);
 			}
-
 			uploadIntervalRef.current = setInterval(() => {
 				currentProgress += UPLOAD_STEP_SIZE;
 				if (currentProgress >= 100) {
@@ -395,8 +400,8 @@ export default function FileUpload({
 					}
 					setProgress(0);
 					setStatus("idle");
-					setFile(null);
-					onUploadSuccess?.(uploadingFile);
+					setFiles([]);
+					onUploadSuccess?.(uploadingFiles);
 				} else {
 					setStatus((prevStatus) => {
 						if (prevStatus === "uploading") {
@@ -415,44 +420,63 @@ export default function FileUpload({
 	);
 
 	const handleFileSelect = useCallback(
-		(selectedFile: File | null) => {
-			if (!selectedFile) return;
+		(selectedFiles: FileList | File[] | null) => {
+			if (!selectedFiles || selectedFiles.length === 0) return;
+
+			const fileArray = Array.from(selectedFiles);
 
 			// Reset error state
 			setError(null);
 
-			// Validate file
-			const sizeError = validateFileSize(selectedFile);
-			if (sizeError) {
-				handleError(sizeError);
+			// Validate file count
+			const countError = validateFileCount(fileArray.length);
+			if (countError) {
+				handleError(countError);
 				return;
 			}
 
-			const typeError = validateFileType(selectedFile);
-			if (typeError) {
-				handleError(typeError);
-				return;
+			// Validate each file
+			const validFiles: File[] = [];
+			for (const file of fileArray) {
+				const sizeError = validateFileSize(file);
+				if (sizeError) {
+					handleError(sizeError);
+					return;
+				}
+
+				const typeError = validateFileType(file);
+				if (typeError) {
+					handleError(typeError);
+					return;
+				}
+
+				const customError = validateFile?.(file);
+				if (customError) {
+					handleError(customError);
+					return;
+				}
+
+				validFiles.push(file);
 			}
 
-			const customError = validateFile?.(selectedFile);
-			if (customError) {
-				handleError(customError);
-				return;
-			}
-
-			setFile(selectedFile);
+			setFiles((prev) => [...prev, ...validFiles]);
 			setStatus("uploading");
 			setProgress(0);
-			simulateUpload(selectedFile);
+			simulateUpload(validFiles);
 		},
 		[
 			simulateUpload,
 			validateFileSize,
 			validateFileType,
+			validateFileCount,
 			validateFile,
 			handleError,
 		]
 	);
+
+	const removeFile = useCallback((index: number) => {
+		setFiles((prev) => prev.filter((_, i) => i !== index));
+	}, []);
 
 	const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
 		e.preventDefault();
@@ -472,16 +496,18 @@ export default function FileUpload({
 			e.stopPropagation();
 			if (status === "uploading") return;
 			setStatus("idle");
-			const droppedFile = e.dataTransfer.files?.[0];
-			if (droppedFile) handleFileSelect(droppedFile);
+			const droppedFiles = e.dataTransfer.files;
+			if (droppedFiles && droppedFiles.length > 0) {
+				handleFileSelect(droppedFiles);
+			}
 		},
 		[status, handleFileSelect]
 	);
 
 	const handleFileInputChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const selectedFile = e.target.files?.[0];
-			handleFileSelect(selectedFile || null);
+			const selectedFiles = e.target.files;
+			handleFileSelect(selectedFiles);
 			if (e.target) e.target.value = "";
 		},
 		[handleFileSelect]
@@ -493,22 +519,24 @@ export default function FileUpload({
 	}, [status]);
 
 	const resetState = useCallback(() => {
-		setFile(null);
+		setFiles([]);
 		setStatus("idle");
 		setProgress(0);
-		if (onFileRemove) onFileRemove();
-	}, [onFileRemove]);
+		if (onFilesRemove) onFilesRemove();
+	}, [onFilesRemove]);
+
+	const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
 	return (
 		<div
 			className={cn("relative w-full max-w-sm mx-auto", className || "")}
 			role="complementary"
 			aria-label="File upload">
-			<div className="group relative w-full rounded-xl  p-0.5">
+			<div className="group relative w-full rounded-xl p-0.5">
 				<div className="relative w-full rounded-[10px] p-1.5">
 					<div
 						className={cn(
-							"relative mx-auto w-full overflow-hidden rounded-lg border border-gray-100 dark:border-white/[0.08] ",
+							"relative mx-auto w-full overflow-hidden rounded-lg border border-gray-100 dark:border-white/[0.08]",
 							error ? "border-red-500/50" : ""
 						)}>
 						<div
@@ -522,10 +550,9 @@ export default function FileUpload({
 							<div className="absolute inset-y-0 right-0 w-[20%] bg-gradient-to-l from-blue-500/10 to-transparent" />
 							<div className="absolute inset-[20%] bg-blue-500/5 rounded-lg transition-all duration-300 animate-pulse" />
 						</div>
-
 						<div className="absolute -right-4 -top-4 h-8 w-8 bg-gradient-to-br from-blue-500/20 to-transparent blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-						<div className="relative h-[240px]">
+						<div className="relative min-h-[280px]">
 							<AnimatePresence mode="wait">
 								{status === "idle" || status === "dragging" ? (
 									<motion.div
@@ -545,7 +572,6 @@ export default function FileUpload({
 										<div className="mb-4">
 											<UploadIllustration />
 										</div>
-
 										<div className="text-center space-y-1.5 mb-4">
 											<h3 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
 												Drag and drop or
@@ -559,28 +585,63 @@ export default function FileUpload({
 													: "SVG, PNG, JPG or GIF"}{" "}
 												{maxFileSize && `up to ${formatBytes(maxFileSize)}`}
 											</p>
+											{files.length > 0 && (
+												<p className="text-xs text-blue-500 dark:text-blue-400">
+													{files.length} file(s) selected •{" "}
+													{formatBytes(totalSize)}
+												</p>
+											)}
 										</div>
-
 										<button
 											type="button"
 											onClick={triggerFileInput}
 											className="w-4/5 flex items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-white/10 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white transition-all duration-200 hover:bg-gray-200 dark:hover:bg-white/20 group">
-											<span>Upload File</span>
+											<span>
+												{files.length > 0 ? "Add More Files" : "Upload Files"}
+											</span>
 											<UploadCloud className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
 										</button>
-
 										<p className="mt-3 mb-2 text-xs text-gray-500 dark:text-gray-400">
-											or drag and drop your file here
+											or drag and drop your files here
 										</p>
-
+										<p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+											Maximum {maxFiles} files
+										</p>
 										<input
 											ref={fileInputRef}
 											type="file"
 											className="sr-only"
 											onChange={handleFileInputChange}
 											accept={acceptedFileTypes?.join(",")}
+											multiple
 											aria-label="File input"
 										/>
+
+										{/* File List */}
+										{files.length > 0 && (
+											<div className="mt-4 w-full max-h-32 overflow-y-auto space-y-2">
+												{files.map((file, index) => (
+													<div
+														key={`${file.name}-${index}`}
+														className="flex items-center justify-between p-2 bg-gray-50 dark:bg-white/5 rounded-lg">
+														<div className="flex items-center gap-2 min-w-0">
+															<FileIcon className="w-3 h-3 text-blue-500 flex-shrink-0" />
+															<span className="text-xs text-gray-700 dark:text-gray-300 truncate">
+																{file.name}
+															</span>
+															<span className="text-xs text-gray-500 flex-shrink-0">
+																{formatBytes(file.size)}
+															</span>
+														</div>
+														<button
+															onClick={() => removeFile(index)}
+															className="p-1 hover:bg-gray-200 dark:hover:bg-white/10 rounded transition-colors">
+															<X className="w-3 h-3 text-gray-500" />
+														</button>
+													</div>
+												))}
+											</div>
+										)}
 									</motion.div>
 								) : status === "uploading" ? (
 									<motion.div
@@ -592,21 +653,19 @@ export default function FileUpload({
 										<div className="mb-4">
 											<UploadingAnimation progress={progress} />
 										</div>
-
 										<div className="text-center space-y-1.5 mb-4">
-											<h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-												{file?.name}
+											<h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+												Uploading {files.length} file(s)
 											</h3>
 											<div className="flex items-center justify-center gap-2 text-xs">
 												<span className="text-gray-500 dark:text-gray-400">
-													{formatBytes(file?.size || 0)}
+													{formatBytes(totalSize)}
 												</span>
 												<span className="font-medium text-blue-500">
 													{Math.round(progress)}%
 												</span>
 											</div>
 										</div>
-
 										<button
 											onClick={resetState}
 											type="button"
@@ -617,7 +676,6 @@ export default function FileUpload({
 								) : null}
 							</AnimatePresence>
 						</div>
-
 						<AnimatePresence>
 							{error && (
 								<motion.div

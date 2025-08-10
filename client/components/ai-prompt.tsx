@@ -25,6 +25,7 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { handleChartUpdates, responseSchema } from "@/lib/types";
 import { toast } from "sonner";
+import { useFileStore } from "@/lib/stores/file-store";
 
 export default function AiPrompt() {
 	const [prompt, setPrompt] = useState("");
@@ -35,9 +36,10 @@ export default function AiPrompt() {
 	});
 	const [selectedModel] = useState("GPT-4-1 Mini");
 	const isMobile = useIsMobile();
-	const { addMessage, updateMessage, isStreaming, setStreaming } =
+	const { addMessage, messages, updateMessage, isStreaming, setStreaming } =
 		useChatStore();
 	const { addChart, isGenerating, setGenerating } = useChartStore();
+	const { uploadedFiles } = useFileStore();
 
 	const { object, submit, isLoading, stop } = useObject({
 		id: "ai-prompt",
@@ -48,6 +50,7 @@ export default function AiPrompt() {
 			toast.error("An error occurred while processing your request.");
 		},
 		onFinish: () => {
+			console.log("Message Response finished");
 			setGenerating(false);
 			setStreaming(false);
 			setMessageId(null);
@@ -67,6 +70,10 @@ export default function AiPrompt() {
 
 	useEffect(() => {
 		if (!object?.content) return;
+		console.log(
+			"Messages are: ",
+			messages.map((msg) => msg.id)
+		);
 
 		if (!messageId) {
 			// Create assistant message
@@ -74,6 +81,10 @@ export default function AiPrompt() {
 				role: "assistant",
 				content: object.content,
 			});
+			console.log("New message ID:", newMessageId);
+			if (newMessageId === "") {
+				return;
+			}
 			setMessageId(newMessageId);
 		} else {
 			// Update existing assistant message
@@ -82,7 +93,7 @@ export default function AiPrompt() {
 				content: object.content,
 			});
 		}
-	}, [object?.content, messageId, addMessage, updateMessage]);
+	}, [addMessage, messageId, object?.content, setMessageId, updateMessage]);
 
 	// Handle chart updates
 	useEffect(() => {
@@ -116,7 +127,10 @@ export default function AiPrompt() {
 				content: prompt.trim(),
 			});
 			setPrompt("");
-			submit(prompt.trim());
+			submit({
+				prompt: prompt.trim(),
+				files: uploadedFiles.map((file) => file.name),
+			});
 		} else if (isLoading) {
 			stop();
 		}

@@ -34,10 +34,33 @@ import { cn } from "@/lib/utils";
 import { UploadedFile } from "@/lib/types";
 import FileUpload from "./dnd-file-upload";
 import { toast } from "sonner";
+import { useMutation } from "@tanstack/react-query";
 
 interface FileUploadDialogProps {
 	children?: React.ReactNode;
 }
+const uploadDocuments = async (files: File[]) => {
+	const formData = new FormData();
+
+	// Append all files with the same field name 'files'
+	files.forEach((file) => {
+		formData.append("files", file);
+	});
+
+	const response = await fetch(
+		"http://localhost:8000/api/v1/documents/upload",
+		{
+			method: "POST",
+			body: formData,
+		}
+	);
+
+	if (!response.ok) {
+		throw new Error(`Upload failed: ${response.statusText}`);
+	}
+
+	return response.json();
+};
 
 export function FileUploadDialog({ children }: FileUploadDialogProps) {
 	const [open, setOpen] = useState(false);
@@ -48,73 +71,76 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 		selectedFiles,
 		uploadProgress,
 		addFile,
-		updateFile,
 		removeFile,
 		selectFile,
 		deselectFile,
 		clearSelectedFiles,
-		setUploadProgress,
 		clearUploadProgress,
 		setUploading,
 	} = useFileStore();
 
-	const handleFiles = async (files: File[]) => {
-		setUploading(true);
+	const uploadMutation = useMutation({
+		mutationFn: uploadDocuments,
+		onSuccess: (data, files) => {
+			// Handle successful uploads
+			if (data.processed_files) {
+				data.processed_files.forEach((filename: string, index: number) => {
+					const fileId = Math.random().toString(36).substr(2, 9);
+					const file = files.find((f) => f.name === filename);
 
-		for (const file of files) {
-			const fileId = Math.random().toString(36).substr(2, 9);
+					if (file) {
+						const uploadedFile: UploadedFile = {
+							id: fileId,
+							name: file.name,
+							size: file.size,
+							type: file.type,
+							uploadDate: new Date(),
+							status: "ready",
+							url: URL.createObjectURL(file),
+							extractedText: "",
+							summary: `Successfully processed ${filename}`,
+						};
 
-			// Create file record
-			const uploadedFile: UploadedFile = {
-				id: fileId,
-				name: file.name,
-				size: file.size,
-				type: file.type,
-				uploadDate: new Date(),
-				status: "uploading",
-			};
-
-			addFile(uploadedFile);
-
-			// Simulate upload progress
-			setUploadProgress(fileId, {
-				fileId,
-				progress: 0,
-				status: "uploading",
-			});
-
-			// Simulate upload process
-			for (let progress = 0; progress <= 100; progress += 10) {
-				await new Promise((resolve) => setTimeout(resolve, 100));
-				setUploadProgress(fileId, {
-					fileId,
-					progress,
-					status: progress === 100 ? "processing" : "uploading",
+						addFile(uploadedFile);
+					}
 				});
 			}
 
-			// Simulate processing
-			updateFile(fileId, { status: "processing" });
-			await new Promise((resolve) => setTimeout(resolve, 1500));
+			// Handle failed uploads - show errors but don't add to store
+			if (data.failed_files) {
+				data.failed_files.forEach(
+					({ filename, error }: { filename: string; error: string }) => {
+						toast.error(`${filename}: ${error}`);
+					}
+				);
+			}
 
-			// Complete upload
-			updateFile(fileId, {
-				status: "ready",
-				url: URL.createObjectURL(file),
-				extractedText: "Sample extracted text from PDF...",
-				summary: "This document contains financial information and analysis.",
-			});
+			if (data.processed_files?.length > 0) {
+				toast.success(
+					`${data.processed_files.length} files uploaded successfully!`
+				);
+			}
+		},
+		onError: (error: Error, files: File[]) => {
+			toast.error(`Upload failed: ${error.message}`);
+		},
+	});
 
-			clearUploadProgress(fileId);
+	const handleFiles = async (files: File[]) => {
+		setUploading(true);
+
+		try {
+			await uploadMutation.mutateAsync(Array.from(files));
+			setActiveTab("select");
+		} catch (error) {
+			console.error("Batch upload error:", error);
+		} finally {
+			setUploading(false);
 		}
-
-		setUploading(false);
-		setActiveTab("select");
 	};
 
-	const handleFileUploadSuccess = useCallback((file: File) => {
-		handleFiles([file]);
-		toast.success("File uploaded successfully!");
+	const handleFileUploadSuccess = useCallback((files: File[]) => {
+		handleFiles(files);
 	}, []);
 
 	const handleFileUploadError = useCallback(
@@ -256,6 +282,7 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 							acceptedFileTypes={["application/pdf"]}
 							maxFileSize={10 * 1024 * 1024} // 10MB
 							uploadDelay={2000}
+							maxFiles={5}
 							className="w-full max-w-none"
 						/>
 
@@ -420,7 +447,7 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 
 				<DialogFooter>
 					<div className="flex items-center justify-between ">
-						<div className="text-sm text-muted-foreground">
+						<div className="text-sm text-muted-foreground mr-4">
 							{selectedFiles.length > 0 && (
 								<span>{selectedFiles.length} files selected for analysis</span>
 							)}

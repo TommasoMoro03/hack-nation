@@ -14,7 +14,7 @@ interface ChatActions {
 	clearMessages: () => void;
 }
 
-export const useChatStore = create<ChatState & ChatActions>((set) => ({
+export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 	// State
 	messages: [
 		{
@@ -36,6 +36,10 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
 			id,
 			timestamp: new Date(),
 		};
+		const lastMessage = get().messages[get().messages.length - 1];
+		if (message.role === lastMessage?.role) {
+			return "";
+		}
 		set((state) => ({
 			messages: [...state.messages, newMessage],
 		}));
