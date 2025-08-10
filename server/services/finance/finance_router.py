@@ -2,6 +2,7 @@ import json
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 
+from services.finance.prediction_service import PredictionService
 from services.finance.yahoo_finance_service import YahooFinanceService
 from utils.prompts import FINANCE_INTENT_PROMPT
 
@@ -11,6 +12,7 @@ class SmartFinanceRouter:
         self.finance_service = finance_service
         self.rag_service = rag_service
         self.llm = llm
+        self.prediction_service = PredictionService(finance_service)
 
     def classify_intent(self, question: str) -> Dict[str, Any]:
         prompt = FINANCE_INTENT_PROMPT.format(question=question)
@@ -120,6 +122,50 @@ class SmartFinanceRouter:
 
         return {"content": content, "charts": [chart]}
 
+    def generate_prediction_chart(self, symbol: str, horizon: str) -> Dict[str, Any]:
+        """Generate prediction chart with historical and forecast data"""
+        prediction = self.prediction_service.predict_with_arma(symbol, horizon)
+
+        # Combine historical and prediction data for the chart
+        chart_data = []
+        for i, date in enumerate(prediction["historical"]["dates"]):
+            chart_data.append({
+                "date": date,
+                "value": prediction["historical"]["prices"][i],
+                "type": "historical"
+            })
+
+        for i, date in enumerate(prediction["prediction"]["dates"]):
+            chart_data.append({
+                "date": date,
+                "value": prediction["prediction"]["values"][i],
+                "type": "prediction",
+                "confidence_lower": prediction["prediction"]["confidence_lower"][i],
+                "confidence_upper": prediction["prediction"]["confidence_upper"][i]
+            })
+
+        content = (f"Prediction for {symbol}: Current price ${prediction['current_price']:.2f}, "
+                   f"predicted price ${prediction['predicted_price']:.2f} by {horizon}.")
+
+        chart = {
+            "id": "price-prediction",
+            "type": "line",
+            "title": f"{symbol} Price Prediction",
+            "data": chart_data,
+            "xKey": "date",
+            "yKey": "value",
+            "dataKeys": ["value"],
+            "colors": ["#8884d8"],
+            "confidenceBand": True,
+            "timeRange": "custom"
+        }
+
+        return {
+            "content": content,
+            "charts": [chart],
+            "prediction_details": prediction
+        }
+
     def route_query(self, question: str) -> Dict[str, Any]:
         print("Qui ci enttro?")
         intent_data = self.classify_intent(question)
@@ -132,6 +178,9 @@ class SmartFinanceRouter:
 
         elif intent == "multi_company_trend" and symbols:
             return self.generate_multi_line_chart(symbols, time_period)
+
+        elif intent == "prediction" and symbols:
+            return self.generate_prediction_chart(symbols[0], time_period)
 
         else:
             # fallback testuale (usa RAG)

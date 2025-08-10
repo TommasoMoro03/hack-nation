@@ -11,3 +11,4 @@ tiktoken
 cryptography>=3.1
 yfinance
 docling
+statsmodels

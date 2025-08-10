@@ -141,7 +141,13 @@ FINANCE_INTENT_PROMPT = """
 Classify the user's financial question into one of these intents:
 - market_summary: requests a general market overview or summary of major indices
 - multi_company_trend: requests performance trends for one or more specific companies/funds/stocks
-- fallback: all other questions that don't fit the above categories
+- price_prediction: prediction of future stock prices
+- fallback: fallback to text-only explanation
+
+For prediction questions, extract:
+- The target company/fund
+- The time horizon (e.g., "Q4 2025")
+- The metric to predict (default to "price")
 
 For market_summary intent, always use these symbols: ['^GSPC', '^DJI', '^IXIC', '^VIX']
 
@@ -153,7 +159,8 @@ Return VALID JSON with these exact keys:
 {
   "intent": "market_summary|multi_company_trend|fallback",
   "symbols": ["symbol1", "symbol2", ...],
-  "time_period": "time_period_string"
+  "time_period": "time_period_string",
+  "prediction_horizon": "..."
 }
 
 Example 1:
