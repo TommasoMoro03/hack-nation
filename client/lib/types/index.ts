@@ -1,3 +1,7 @@
+import { ChartConfig } from "./chart";
+export * from "./chart";
+export * from "./response";
+
 export interface Message {
 	id: string;
 	role: "user" | "assistant";
@@ -5,22 +9,6 @@ export interface Message {
 	timestamp: Date;
 	isStreaming?: boolean;
 	attachedFiles?: UploadedFile[];
-}
-
-export interface ChartDataPoint {
-	[key: string]: string | number | Date | null;
-}
-
-export interface ChartConfig {
-	id: string;
-	type: "line" | "bar" | "pie" | "area" | "scatter";
-	title: string;
-	data: ChartDataPoint[];
-	xKey?: string;
-	yKey?: string;
-	dataKeys?: string[];
-	colors?: string[];
-	timeRange?: "1W" | "1M" | "3M" | "6M" | "1Y";
 }
 
 export interface FinancialMetric {

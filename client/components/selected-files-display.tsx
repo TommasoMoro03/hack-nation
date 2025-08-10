@@ -44,8 +44,8 @@ export function SelectedFilesDisplay({ className }: SelectedFilesDisplayProps) {
 						className={cn(
 							"flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
 							"bg-blue-50 dark:bg-blue-950/30",
-							"border border-blue-200 dark:border-blue-800",
-							"text-blue-700 dark:text-blue-300",
+							"border border-primary",
+							"text-primary",
 							"text-xs font-medium",
 							"max-w-[200px]"
 						)}>

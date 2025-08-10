@@ -8,6 +8,7 @@ import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
+	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
@@ -18,7 +19,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import {
 	FileText,
 	Trash2,
@@ -30,10 +30,10 @@ import {
 	Plus,
 	Paperclip,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { UploadedFile } from "@/lib/types";
 import FileUpload from "./dnd-file-upload";
+import { toast } from "sonner";
 
 interface FileUploadDialogProps {
 	children?: React.ReactNode;
@@ -114,6 +114,7 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 
 	const handleFileUploadSuccess = useCallback((file: File) => {
 		handleFiles([file]);
+		toast.success("File uploaded successfully!");
 	}, []);
 
 	const handleFileUploadError = useCallback(
@@ -218,7 +219,7 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 					</label>
 				)}
 			</DialogTrigger>
-			<DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+			<DialogContent className="md:min-w-2xl max-h-[80vh] flex flex-col">
 				<DialogHeader>
 					<DialogTitle>Document Management</DialogTitle>
 					<DialogDescription>
@@ -310,87 +311,98 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 							</Badge>
 						</div>
 
-						<ScrollArea className="flex-1 pr-4">
+						<ScrollArea className="h-[400px] md:h-[600px] pr-3">
 							<div className="space-y-3">
-								<AnimatePresence>
-									{uploadedFiles.map((file) => (
-										<motion.div
-											key={file.id}
-											initial={{ opacity: 0, y: 20 }}
-											animate={{ opacity: 1, y: 0 }}
-											exit={{ opacity: 0, y: -20 }}
-											className={cn(
-												"border rounded-lg p-4 transition-colors",
-												selectedFiles.includes(file.id)
-													? "border-primary bg-primary/5"
-													: "border-border hover:border-muted-foreground/50"
-											)}>
-											<div className="flex items-start gap-3">
-												<Checkbox
-													checked={selectedFiles.includes(file.id)}
-													onCheckedChange={(checked) => {
-														if (checked) {
-															selectFile(file.id);
-														} else {
-															deselectFile(file.id);
-														}
-													}}
-													disabled={file.status !== "ready"}
-													className="mt-1"
-												/>
+								{uploadedFiles.map((file) => (
+									<div
+										key={file.id}
+										onClick={() => {
+											if (file.status === "ready") {
+												if (selectedFiles.includes(file.id)) {
+													deselectFile(file.id);
+												} else {
+													selectFile(file.id);
+												}
+											}
+										}}
+										className={cn(
+											"border rounded-lg p-4 transition-colors",
+											selectedFiles.includes(file.id)
+												? "border-primary bg-primary/5"
+												: "border-border hover:border-muted-foreground/50"
+										)}>
+										<div className="flex items-start gap-3">
+											<Checkbox
+												checked={selectedFiles.includes(file.id)}
+												onCheckedChange={(checked) => {
+													if (checked) {
+														selectFile(file.id);
+													} else {
+														deselectFile(file.id);
+													}
+												}}
+												disabled={file.status !== "ready"}
+												className="mt-1"
+											/>
 
-												<div className="flex-1 min-w-0">
-													<div className="flex items-center gap-2 mb-2">
-														{getStatusIcon(file.status)}
-														<h4 className="font-medium truncate">
-															{file.name}
-														</h4>
-														{getStatusBadge(file.status)}
-													</div>
-
-													<div className="flex items-center gap-4 text-xs text-muted-foreground mb-2">
-														<span>{formatFileSize(file.size)}</span>
-														<span>
-															{new Date(file.uploadDate).toLocaleDateString()}
-														</span>
-													</div>
-
-													{file.summary && (
-														<p className="text-sm text-muted-foreground line-clamp-2">
-															{file.summary}
-														</p>
-													)}
+											<div className="flex-1 min-w-0">
+												<div className="flex items-center gap-2 mb-2">
+													{getStatusIcon(file.status)}
+													<h4 className="font-medium truncate">{file.name}</h4>
+													{getStatusBadge(file.status)}
 												</div>
 
-												<div className="flex items-center gap-1">
-													{file.status === "ready" && (
-														<>
-															<Button
-																variant="ghost"
-																size="sm"
-																className="h-8 w-8 p-0">
-																<Eye className="w-4 h-4" />
-															</Button>
-															<Button
-																variant="ghost"
-																size="sm"
-																className="h-8 w-8 p-0">
-																<Download className="w-4 h-4" />
-															</Button>
-														</>
-													)}
-													<Button
-														variant="ghost"
-														size="sm"
-														className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-														onClick={() => handleRemoveFile(file.id)}>
-														<Trash2 className="w-4 h-4" />
-													</Button>
+												<div className="flex items-center gap-4 text-xs text-muted-foreground mb-2">
+													<span>{formatFileSize(file.size)}</span>
+													<span>
+														{new Date(file.uploadDate).toLocaleDateString()}
+													</span>
 												</div>
+
+												{file.summary && (
+													<p className="text-sm text-muted-foreground line-clamp-2">
+														{file.summary}
+													</p>
+												)}
 											</div>
-										</motion.div>
-									))}
-								</AnimatePresence>
+
+											<div className="flex items-center gap-1">
+												{file.status === "ready" && (
+													<>
+														<Button
+															onClick={(e) => {
+																e.stopPropagation();
+															}}
+															variant="ghost"
+															size="sm"
+															className="h-8 w-8 p-0">
+															<Eye className="w-4 h-4" />
+														</Button>
+														<Button
+															onClick={(e) => {
+																e.stopPropagation();
+															}}
+															variant="ghost"
+															size="sm"
+															className="h-8 w-8 p-0">
+															<Download className="w-4 h-4" />
+														</Button>
+													</>
+												)}
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+													onClick={(e) => {
+														e.stopPropagation();
+														handleRemoveFile(file.id);
+													}}>
+													<Trash2 className="w-4 h-4" />
+												</Button>
+											</div>
+										</div>
+									</div>
+								))}
 
 								{uploadedFiles.length === 0 && (
 									<div className="text-center py-8 text-muted-foreground">
@@ -406,27 +418,27 @@ export function FileUploadDialog({ children }: FileUploadDialogProps) {
 					</TabsContent>
 				</Tabs>
 
-				<Separator />
-
-				<div className="flex items-center justify-between pt-4">
-					<div className="text-sm text-muted-foreground">
-						{selectedFiles.length > 0 && (
-							<span>{selectedFiles.length} files selected for analysis</span>
-						)}
+				<DialogFooter>
+					<div className="flex items-center justify-between ">
+						<div className="text-sm text-muted-foreground">
+							{selectedFiles.length > 0 && (
+								<span>{selectedFiles.length} files selected for analysis</span>
+							)}
+						</div>
+						<div className="flex items-center gap-2">
+							<Button
+								variant="outline"
+								onClick={() => handleCloseDialog(false)}>
+								Cancel
+							</Button>
+							<Button
+								onClick={handleApplySelection}
+								disabled={selectedFiles.length === 0}>
+								Apply Selection
+							</Button>
+						</div>
 					</div>
-					<div className="flex items-center gap-2">
-						<Button
-							variant="outline"
-							onClick={() => handleCloseDialog(false)}>
-							Cancel
-						</Button>
-						<Button
-							onClick={handleApplySelection}
-							disabled={selectedFiles.length === 0}>
-							Apply Selection
-						</Button>
-					</div>
-				</div>
+				</DialogFooter>
 			</DialogContent>
 		</Dialog>
 	);
