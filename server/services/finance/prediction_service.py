@@ -111,6 +111,6 @@ class PredictionService:
 
 
 # Example usage:
-prediction_service = PredictionService(YahooFinanceService())
-prediction = prediction_service.predict_with_arma("AAPL", "Q4 2025")
-print(prediction)
+# prediction_service = PredictionService(YahooFinanceService())
+# prediction = prediction_service.predict_with_arma("AAPL", "Q4 2025")
+# print(prediction)

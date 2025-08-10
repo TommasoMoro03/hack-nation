@@ -27,6 +27,7 @@ class RouterResult:
     """Result of query routing"""
     source: str  # 'rag', 'finance', 'mixed'
     answer: str
+    sent_analysis: Optional[str]
     data: Optional[Dict[str, Any]] = None
     processing_time: float = 0.0
     charts: Optional[List[Dict[str, Any]]] = None  # Add charts field for visualization
@@ -92,6 +93,7 @@ class QueryRouter:
             return RouterResult(
                 source='error',
                 answer="I encountered an error while processing your query. Please try again.",
+                sent_analysis=None,
                 processing_time=processing_time
             )
 
@@ -215,6 +217,7 @@ Respond with JSON only:
             return RouterResult(
                 source='rag',
                 answer=result.answer,
+                sent_analysis=result.sent_analysis,
                 data={
                     'chunks_used': result.chunks_used,
                     'filter_applied': result.filter_applied
@@ -227,6 +230,7 @@ Respond with JSON only:
             return RouterResult(
                 source='rag',
                 answer="I couldn't find relevant information in the documents for your question.",
+                sent_analysis=None,
                 processing_time=processing_time
             )
 
@@ -242,6 +246,7 @@ Respond with JSON only:
                 return RouterResult(
                     source='finance',
                     answer=smart_result.get('content', 'No content available'),
+                    sent_analysis=None,
                     charts=smart_result.get('charts', []),
                     data={
                         'symbols': analysis.symbols,
@@ -276,6 +281,7 @@ Respond with JSON only:
                     return RouterResult(
                         source='finance',
                         answer=answer,
+                        sent_analysis=None,
                         data={
                             'symbols': list(stock_data.keys()),
                             'stock_data': {k: {
@@ -295,6 +301,7 @@ Respond with JSON only:
             return RouterResult(
                 source='finance',
                 answer=answer,
+                sent_analysis=None,
                 data={'market_summary': market_summary},
                 processing_time=processing_time
             )
@@ -305,6 +312,7 @@ Respond with JSON only:
             return RouterResult(
                 source='finance',
                 answer="I couldn't retrieve the financial data you requested. Please try again.",
+                sent_analysis=None,
                 processing_time=processing_time
             )
 
@@ -344,6 +352,7 @@ Respond with JSON only:
             return RouterResult(
                 source='mixed',
                 answer=combined_answer,
+                sent_analysis=rag_result.sent_analysis,
                 charts=charts,
                 data={
                     'rag_chunks': rag_result.chunks_used,
@@ -358,6 +367,7 @@ Respond with JSON only:
             return RouterResult(
                 source='mixed',
                 answer="I encountered an error while processing your query. Please try again.",
+                sent_analysis=None,
                 processing_time=processing_time
             )
 

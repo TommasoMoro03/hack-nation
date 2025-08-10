@@ -12,6 +12,7 @@ from utils.prompts import INTENT_EXTRACTION_PROMPT
 class RAGResult:
     """Result of RAG processing"""
     answer: str
+    sent_analysis: Optional[str]
     chunks_used: int
     processing_time: float
     filter_applied: str
@@ -46,6 +47,7 @@ class RAGService:
             if not documents:
                 return RAGResult(
                     answer="I couldn't find any relevant documents for your question.",
+                    sent_analysis=None,
                     chunks_used=0,
                     processing_time=time.time() - start_time,
                     filter_applied=filter_applied
@@ -56,11 +58,15 @@ class RAGService:
             
             # Step 3: Generate answer
             answer = self._generate_answer(question, chunks)
+
+            # Step 4: Generate sentiment analysis
+            sent_analysis = self._analyze_sentiment(chunks)
             
             processing_time = time.time() - start_time
             
             return RAGResult(
                 answer=answer,
+                sent_analysis=sent_analysis,
                 chunks_used=len(chunks),
                 processing_time=processing_time,
                 filter_applied=filter_applied
@@ -70,6 +76,7 @@ class RAGService:
             self.logger.error(f"RAG processing failed: {str(e)}")
             return RAGResult(
                 answer="I encountered an error while processing your question. Please try again.",
+                sent_analysis=None,
                 chunks_used=0,
                 processing_time=time.time() - start_time,
                 filter_applied="Error"
@@ -240,4 +247,52 @@ Please provide a clear, accurate answer based on the information in the document
             
         except Exception as e:
             self.logger.error(f"Error generating answer: {str(e)}")
-            return "I apologize, but I encountered an error while generating the answer. Please try again." 
+            return "I apologize, but I encountered an error while generating the answer. Please try again."
+
+    def _analyze_sentiment(self, chunks: List[Dict]) -> Optional[str]:
+        """Perform sentiment analysiss using LLM on the retrieved chunks"""
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+            if not chunks:
+                return None
+
+            # Prepare context for sentiment analysis
+            context_parts = []
+            for i, chunk in enumerate(chunks[:5]):  # Use top 5 chunks
+                content = chunk.get('content', '')
+                company = chunk.get('company', 'Unknown')
+                year = chunk.get('year', 'Unknown')
+
+                if content.strip():
+                    context_parts.append(f"Document {i+1} ({company}, {year}):\n{content}\n")
+
+            context = "\n".join(context_parts)
+
+            # Create prompt for sentiment analysis
+            prompt = f"""
+Analyze the sentiment of the following document context. Provide a summary of the overall sentiment and any notable positive or negative aspects.
+Context:
+{context}
+Please provide a clear sentiment analysis based on the information in the documents.
+"""
+
+            # Generate sentiment analysis
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a financial document sentiment analyst. Analyze the sentiment of the provided document context."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=500
+            )
+
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            self.logger.error(f"Error performing sentiment analysis: {str(e)}")
+            return None
