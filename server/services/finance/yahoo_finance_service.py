@@ -52,16 +52,16 @@ class YahooFinanceService:
             previous_price = hist['Close'].iloc[-2]
             change = current_price - previous_price
             change_percent = (change / previous_price) * 100
-            
+
             stock_data = StockData(
                 symbol=symbol.upper(),
-                current_price=current_price,
-                change=change,
-                change_percent=change_percent,
-                volume=hist['Volume'].iloc[-1],
-                market_cap=info.get('marketCap'),
-                pe_ratio=info.get('trailingPE'),
-                dividend_yield=info.get('dividendYield'),
+                current_price=float(current_price),
+                change=float(change),
+                change_percent=float(change_percent),
+                volume=int(hist['Volume'].iloc[-1]),
+                market_cap=int(info.get('marketCap')) if info.get('marketCap') else None,
+                pe_ratio=float(info.get('trailingPE')) if info.get('trailingPE') else None,
+                dividend_yield=float(info.get('dividendYield')) if info.get('dividendYield') else None,
                 timestamp=datetime.now()
             )
             
